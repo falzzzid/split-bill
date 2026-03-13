@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Split Bill Pro v2</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+</head>
+
+<body class="bg-gray-100">
+
+<div id="root"></div>
+
+<script type="text/babel">
+
+const {useState,useEffect,useMemo} = React
+
+const firebaseConfig = {
+
+apiKey:"AIzaSyB8TSDljVuxeeyLqlfaNA8dG7NY9zCkxiE",
+authDomain:"split-bill-xpl.firebaseapp.com",
+databaseURL:"https://split-bill-xpl-default-rtdb.asia-southeast1.firebasedatabase.app",
+projectId:"split-bill-xpl",
+storageBucket:"split-bill-xpl.appspot.com",
+messagingSenderId:"395108199099",
+appId:"1:395108199099:web:ee385d0148220a59e1579e"
+
+}
+
+firebase.initializeApp(firebaseConfig)
+
+const db = firebase.database()
+
+const format = n => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,".")
+
+const parseNum = v => parseInt(v.replace(/\./g,""))||0
+
+function App(){
+
+const params = new URLSearchParams(location.search)
+
+const billId = params.get("bill") || "demo"
+
+let userId = localStorage.getItem("splitUser")
+
+if(!userId){
+
+userId = "u"+Math.random().toString(36).substr(2,9)
+
+localStorage.setItem("splitUser",userId)
+
+}
+
+const [users,setUsers] = useState({})
+const [items,setItems] = useState({})
+const [name,setName] = useState("")
+
+useEffect(()=>{
+
+const ref = db.ref("bills/"+billId)
+
+ref.child("users").on("value",s=>{
+
+setUsers(s.val()||{})
+
+})
+
+ref.child("items").on("value",s=>{
+
+setItems(s.val()||{})
+
+})
+
+},[])
+
+function join(){
+
+if(!name) return
+
+db.ref("bills/"+billId+"/users/"+userId).set({
+
+name:name,
+online:true
+
+})
+
+}
+
+function addItem(){
+
+const id = Date.now()
+
+db.ref("bills/"+billId+"/items/"+id).set({
+
+id,
+name:"",
+price:0,
+selectedBy:{}
+
+})
+
+}
+
+function updateItem(id,key,val){
+
+db.ref("bills/"+billId+"/items/"+id+"/"+key).set(
+key==="price" ? parseNum(val) : val
+)
+
+}
+
+function toggle(itemId,uId){
+
+const ref = db.ref(`bills/${billId}/items/${itemId}/selectedBy/${uId}`)
+
+ref.once("value",snap=>{
+
+if(snap.exists()) ref.remove()
+else ref.set(true)
+
+})
+
+}
+
+const totals = useMemo(()=>{
+
+let t={}
+
+Object.values(users).forEach(u=>{
+
+t[u.name]=0
+
+})
+
+Object.values(items).forEach(i=>{
+
+const arr = Object.keys(i.selectedBy||{})
+
+if(!arr.length) return
+
+const share = i.price/arr.length
+
+arr.forEach(uid=>{
+
+const u = users[uid]
+
+if(!u) return
+
+t[u.name]+=share
+
+})
+
+})
+
+return t
+
+},[items,users])
+
+const totalBill = Object.values(items).reduce((a,b)=>a+(b.price||0),0)
+
+return(
+
+<div className="max-w-xl mx-auto p-4">
+
+<h1 className="text-2xl font-bold mb-4">
+Split Bill Pro v2
+</h1>
+
+{/* JOIN */}
+
+{!users[userId] && (
+
+<div className="bg-white p-4 rounded shadow mb-4">
+
+<input
+placeholder="Nama"
+value={name}
+onChange={e=>setName(e.target.value)}
+className="border p-2 w-full mb-2"
+/>
+
+<button
+onClick={join}
+className="bg-indigo-600 text-white px-4 py-2 rounded w-full"
+>
+
+Join Bill
+
+</button>
+
+</div>
+
+)}
+
+{/* USERS */}
+
+<div className="bg-white p-4 rounded shadow mb-4">
+
+<h2 className="font-bold mb-2">
+Users
+</h2>
+
+<div className="flex flex-wrap gap-2">
+
+{Object.entries(users).map(([id,u])=>
+
+<div
+key={id}
+className={`px-3 py-1 rounded-full text-sm
+${id===userId ? "bg-indigo-600 text-white":"bg-gray-200"}
+`}
+>
+
+{id===userId?"🟢 ":"⚪ "}
+{u.name}
+
+</div>
+
+)}
+
+</div>
+
+</div>
+
+{/* ITEMS */}
+
+<div className="space-y-3">
+
+{Object.values(items).map(item=>
+
+<div key={item.id} className="bg-white p-3 rounded shadow">
+
+<div className="flex gap-2 mb-2">
+
+<input
+value={item.name}
+placeholder="Item"
+onChange={e=>updateItem(item.id,"name",e.target.value)}
+className="border p-2 flex-1"
+/>
+
+<input
+value={format(item.price)}
+onChange={e=>updateItem(item.id,"price",e.target.value)}
+className="border p-2 w-28 text-right"
+/>
+
+</div>
+
+<div className="flex flex-wrap gap-2">
+
+{Object.entries(users).map(([uid,u])=>
+
+<button
+key={uid}
+onClick={()=>toggle(item.id,uid)}
+className={`px-3 py-1 rounded text-xs border
+${item.selectedBy?.[uid]
+?"bg-indigo-600 text-white"
+:"bg-gray-200"}
+`}
+>
+
+{u.name}
+
+</button>
+
+)}
+
+</div>
+
+</div>
+
+)}
+
+<button
+onClick={addItem}
+className="w-full border-dashed border-2 py-2 rounded"
+>
+
++ tambah item
+
+</button>
+
+</div>
+
+{/* TOTAL */}
+
+<div className="mt-6 bg-white p-4 rounded shadow">
+
+<h2 className="font-bold mb-2">
+Total
+</h2>
+
+{Object.entries(totals).map(([name,val])=>
+
+<div key={name} className="flex justify-between">
+
+<span>{name}</span>
+
+<span>
+Rp {format(Math.round(val))}
+</span>
+
+</div>
+
+)}
+
+<hr className="my-2"/>
+
+<div className="flex justify-between font-bold">
+
+<span>Total Bill</span>
+
+<span>
+Rp {format(totalBill)}
+</span>
+
+</div>
+
+</div>
+
+</div>
+
+)
+
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>)
+
+</script>
+
+</body>
+</html>
