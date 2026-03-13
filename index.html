@@ -12,8 +12,6 @@
 
 <script src="https://cdn.tailwindcss.com"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -44,9 +42,7 @@ const format = n => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,".")
 const parseNum = v => parseInt(v.replace(/\./g,""))||0
 
 function randomBill(){
-
 return Math.random().toString(36).substr(2,6)
-
 }
 
 function App(){
@@ -56,21 +52,15 @@ const params = new URLSearchParams(location.search)
 let billId = params.get("bill")
 
 if(!billId){
-
 billId = randomBill()
-
 location.search="?bill="+billId
-
 }
 
 let userId = localStorage.getItem("splitUser")
 
 if(!userId){
-
 userId = "u"+Math.random().toString(36).substr(2,9)
-
 localStorage.setItem("splitUser",userId)
-
 }
 
 const [users,setUsers] = useState({})
@@ -89,8 +79,6 @@ ref.child("items").on("value",s=>{
 setItems(s.val()||{})
 })
 
-setTimeout(generateQR,500)
-
 },[])
 
 function join(){
@@ -104,8 +92,14 @@ name:name
 }
 
 function updateUser(uid,val){
-
 db.ref("bills/"+billId+"/users/"+uid+"/name").set(val)
+}
+
+function resetUsers(){
+
+if(!confirm("Reset semua user?")) return
+
+db.ref("bills/"+billId+"/users").remove()
 
 }
 
@@ -117,15 +111,14 @@ db.ref("bills/"+billId+"/items/"+id).set({
 id,
 name:"",
 price:0,
+qty:1,
 selectedBy:{}
 })
 
 }
 
 function deleteItem(id){
-
 db.ref("bills/"+billId+"/items/"+id).remove()
-
 }
 
 function updateItem(id,key,val){
@@ -147,7 +140,7 @@ else ref.set(true)
 
 }
 
-function resetBill(){
+function resetItems(){
 
 if(!confirm("Reset semua item?")) return
 
@@ -169,7 +162,9 @@ const arr = Object.keys(i.selectedBy||{})
 
 if(!arr.length) return
 
-const share = i.price/arr.length
+const totalItem = (i.price||0) * (i.qty||1)
+
+const share = totalItem / arr.length
 
 arr.forEach(uid=>{
 t[uid]+=share
@@ -181,7 +176,9 @@ return t
 
 },[items,users])
 
-const totalBill = Object.values(items).reduce((a,b)=>a+(b.price||0),0)
+const totalBill = Object.values(items).reduce(
+(a,b)=>a+((b.price||0)*(b.qty||1)),0
+)
 
 function copyBill(){
 
@@ -194,14 +191,6 @@ txt+=`${users[uid]?.name} : Rp ${format(Math.round(val))}\n`
 navigator.clipboard.writeText(txt)
 
 alert("Bill copied")
-
-}
-
-function generateQR(){
-
-const url = location.href
-
-QRCode.toCanvas(document.getElementById("qr"),url)
 
 }
 
@@ -256,6 +245,13 @@ ${id===userId?"bg-indigo-600 text-white":"bg-gray-200"}
 
 </div>
 
+<button
+onClick={resetUsers}
+className="mt-3 w-full bg-red-500 text-white py-2 rounded"
+>
+Reset Users
+</button>
+
 </div>
 
 <div className="space-y-3">
@@ -277,6 +273,12 @@ className="border p-2 flex-1"
 value={format(item.price)}
 onChange={e=>updateItem(item.id,"price",e.target.value)}
 className="border p-2 w-24 text-right"
+/>
+
+<input
+value={item.qty}
+onChange={e=>updateItem(item.id,"qty",parseInt(e.target.value)||1)}
+className="border p-2 w-16 text-center"
 />
 
 <button
@@ -341,7 +343,7 @@ className="w-full border-dashed border-2 py-2 rounded"
 
 </div>
 
-<div className="grid grid-cols-2 gap-2 mt-4">
+<div className="grid grid-cols-3 gap-2 mt-4">
 
 <button
 onClick={copyBill}
@@ -351,19 +353,18 @@ Copy Bill
 </button>
 
 <button
-onClick={resetBill}
+onClick={resetItems}
 className="bg-red-600 text-white py-2 rounded"
 >
-Reset
+Reset Items
 </button>
 
-</div>
-
-<div className="mt-6 text-center">
-
-<p className="text-sm mb-2">Share Bill</p>
-
-<canvas id="qr"></canvas>
+<button
+onClick={resetUsers}
+className="bg-red-700 text-white py-2 rounded"
+>
+Reset Users
+</button>
 
 </div>
 
